@@ -1,14 +1,12 @@
 name: Deploy Flipkart Clone to AWS ECS
 
 on:
-  # Manual all-service or selected-service deployment.
-  # Automatic path-based deployments are handled by deploy-<service>.yml workflows.
   workflow_dispatch:
     inputs:
       service:
-        description: "Service to deploy"
+        description: 'Service to deploy'
         required: true
-        default: "all"
+        default: 'all'
         type: choice
         options:
           - all
@@ -20,59 +18,94 @@ on:
           - payment-service
           - notification-service
           - frontend
+  push:
+    branches: [main]
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
-  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER || 'flipkart-cluster' }}
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: flipkart-cluster
 
 jobs:
-  build-and-deploy:
-    name: Build and deploy ${{ matrix.key }}
+  deploy:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
         include:
           - key: api-gateway
-            directory: api-gateway
-            ecr_repository: flipkart-api-gateway
-            ecs_service: api-gateway-service
+            service: api-gateway-service
+            family: flipkart-api-gateway
+            container: api-gateway
+            port: 3000
+            build_dir: api-gateway
           - key: user-service
-            directory: user-service
-            ecr_repository: flipkart-user-service
-            ecs_service: user-service
+            service: user-service
+            family: flipkart-user-service
+            container: user-service
+            port: 3001
+            build_dir: user-service
           - key: product-service
-            directory: product-service
-            ecr_repository: flipkart-product-service
-            ecs_service: product-service
+            service: product-service
+            family: flipkart-product-service
+            container: product-service
+            port: 3002
+            build_dir: product-service
           - key: cart-service
-            directory: cart-service
-            ecr_repository: flipkart-cart-service
-            ecs_service: cart-service
+            service: cart-service
+            family: flipkart-cart-service
+            container: cart-service
+            port: 3003
+            build_dir: cart-service
           - key: order-service
-            directory: order-service
-            ecr_repository: flipkart-order-service
-            ecs_service: order-service
+            service: order-service
+            family: flipkart-order-service
+            container: order-service
+            port: 3004
+            build_dir: order-service
           - key: payment-service
-            directory: payment-service
-            ecr_repository: flipkart-payment-service
-            ecs_service: payment-service
+            service: payment-service
+            family: flipkart-payment-service
+            container: payment-service
+            port: 3005
+            build_dir: payment-service
           - key: notification-service
-            directory: notification-service
-            ecr_repository: flipkart-notification-service
-            ecs_service: notification-service
+            service: notification-service
+            family: flipkart-notification-service
+            container: notification-service
+            port: 3006
+            build_dir: notification-service
           - key: frontend
-            directory: frontend
-            ecr_repository: flipkart-frontend
-            ecs_service: frontend-service
-
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.service == 'all' || github.event.inputs.service == matrix.key }}
+            service: frontend-service
+            family: flipkart-frontend
+            container: frontend
+            port: 80
+            build_dir: frontend
 
     steps:
-      - name: Checkout
+      - name: Check if should deploy this service
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.service }}" == "all" ] || \
+               [ "${{ github.event.inputs.service }}" == "${{ matrix.key }}" ]; then
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+              echo "Deploying: ${{ matrix.key }}"
+            else
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+              echo "Skipping: ${{ matrix.key }}"
+            fi
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "Push event - deploying: ${{ matrix.key }}"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout code
+        if: steps.check.outputs.should_deploy == 'true'
         uses: actions/checkout@v4
 
       - name: Configure AWS credentials
+        if: steps.check.outputs.should_deploy == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -80,45 +113,75 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
+        if: steps.check.outputs.should_deploy == 'true'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag and push Docker image
+      - name: Build and push Docker image
+        if: steps.check.outputs.should_deploy == 'true'
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: flipkart-${{ matrix.key }}
           IMAGE_TAG: ${{ github.sha }}
-          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL || '/api' }}
         run: |
-          set -euo pipefail
-          DIR="${{ matrix.directory }}"
-          REPO="${{ matrix.ecr_repository }}"
-          DOCKERFILE="$DIR/Dockerfile"
-          if [ -f "$DIR/Dockerfile.aws" ]; then
-            DOCKERFILE="$DIR/Dockerfile.aws"
+          echo "Building ${{ matrix.key }}..."
+          echo "Build directory: ${{ matrix.build_dir }}"
+
+          # Check for Dockerfile.aws (backend services need it for DocumentDB TLS)
+          if [ -f "${{ matrix.build_dir }}/Dockerfile.aws" ]; then
+            echo "Using Dockerfile.aws for DocumentDB TLS support"
+            docker build -f ${{ matrix.build_dir }}/Dockerfile.aws \
+                         -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                         -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+                         ${{ matrix.build_dir }}/
+          else
+            echo "Using normal Dockerfile"
+            docker build -f ${{ matrix.build_dir }}/Dockerfile \
+                         -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                         -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+                         ${{ matrix.build_dir }}/
           fi
 
-          BUILD_ARGS=""
-          if [ "$DIR" = "frontend" ]; then
-            BUILD_ARGS="--build-arg REACT_APP_API_URL=$REACT_APP_API_URL"
-          fi
+          echo "Pushing $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-          echo "Building $REPO from $DIR using $DOCKERFILE"
-          docker build -f "$DOCKERFILE" $BUILD_ARGS -t "$ECR_REGISTRY/$REPO:$IMAGE_TAG" "$DIR"
-          docker tag "$ECR_REGISTRY/$REPO:$IMAGE_TAG" "$ECR_REGISTRY/$REPO:latest"
-          docker push "$ECR_REGISTRY/$REPO:$IMAGE_TAG"
-          docker push "$ECR_REGISTRY/$REPO:latest"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Force ECS service deployment
+      - name: Download current task definition
+        if: steps.check.outputs.should_deploy == 'true'
         run: |
-          aws ecs update-service \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --service "${{ matrix.ecs_service }}" \
-            --force-new-deployment \
-            --region "${{ env.AWS_REGION }}"
+          aws ecs describe-task-definition \
+            --task-definition ${{ matrix.family }} \
+            --query 'taskDefinition' \
+            --output json > task-definition.json
+          echo "Downloaded task definition for ${{ matrix.family }}"
 
-      - name: Wait for ECS stability
+      - name: Render new task definition
+        if: steps.check.outputs.should_deploy == 'true'
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ matrix.container }}
+          image: ${{ steps.build-push.outputs.image }}
+
+      - name: Deploy to ECS
+        if: steps.check.outputs.should_deploy == 'true'
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ matrix.service }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 5
+
+      - name: Deployment complete
+        if: steps.check.outputs.should_deploy == 'true'
         run: |
-          aws ecs wait services-stable \
-            --cluster "${{ env.ECS_CLUSTER }}" \
-            --services "${{ matrix.ecs_service }}" \
-            --region "${{ env.AWS_REGION }}"
+          echo "========================================="
+          echo "DEPLOYMENT SUCCESSFUL"
+          echo "Service: ${{ matrix.service }}"
+          echo "Image: ${{ steps.build-push.outputs.image }}"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "========================================="
