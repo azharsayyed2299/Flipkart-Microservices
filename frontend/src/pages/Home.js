@@ -36,7 +36,7 @@ function Home() {
     <div className="home page">
       <section className="hero-banner">
         <div className="hero-content">
-          <p className="eyebrow">Azharicroservices</p>
+          <p className="eyebrow">Azhar's Microservices</p>
           <h1>Everything you need, delivered fast.</h1>
           <p>Browse electronics, fashion, home essentials and more with a production-style microservices backend.</p>
           <Link to="/products" className="hero-btn">Shop Now</Link>
