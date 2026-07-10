@@ -1,0 +1,236 @@
+version: "3.9"
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: flipkart-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  user-service:
+    build: ./user-service
+    container_name: flipkart-user-service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-users
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  product-service:
+    build: ./product-service
+    container_name: flipkart-product-service
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-products
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  cart-service:
+    build: ./cart-service
+    container_name: flipkart-cart-service
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-carts
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  notification-service:
+    build: ./notification-service
+    container_name: flipkart-notification-service
+    restart: unless-stopped
+    ports:
+      - "3006:3006"
+    environment:
+      PORT: 3006
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-notifications
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Flipkart Clone <no-reply@example.com>}
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3006/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  order-service:
+    build: ./order-service
+    container_name: flipkart-order-service
+    restart: unless-stopped
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-orders
+      CART_SERVICE_URL: http://cart-service:3003
+      NOTIFICATION_SERVICE_URL: http://notification-service:3006
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  payment-service:
+    build: ./payment-service
+    container_name: flipkart-payment-service
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      MONGODB_URI: mongodb://mongodb:27017/flipkart-payments
+      ORDER_SERVICE_URL: http://order-service:3004
+      NOTIFICATION_SERVICE_URL: http://notification-service:3006
+      CORS_ORIGIN: "*"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3005/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: flipkart-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${API_GATEWAY_PORT:-3000}:3000"
+    environment:
+      PORT: 3000
+      JWT_SECRET: ${JWT_SECRET:-replace-with-a-long-random-secret}
+      CORS_ORIGIN: "*"
+      USER_SERVICE_URL: http://user-service:3001
+      PRODUCT_SERVICE_URL: http://product-service:3002
+      CART_SERVICE_URL: http://cart-service:3003
+      ORDER_SERVICE_URL: http://order-service:3004
+      PAYMENT_SERVICE_URL: http://payment-service:3005
+      NOTIFICATION_SERVICE_URL: http://notification-service:3006
+    depends_on:
+      user-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_URL: /api
+    container_name: flipkart-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - flipkart-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+
+volumes:
+  mongodb_data:
+
+networks:
+  flipkart-network:
+    driver: bridge

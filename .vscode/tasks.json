@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Docker Compose: Up Build",
+      "type": "shell",
+      "command": "docker compose up --build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker Compose: Up Detached",
+      "type": "shell",
+      "command": "docker compose up -d --build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker Compose: Down",
+      "type": "shell",
+      "command": "docker compose down",
+      "problemMatcher": []
+    },
+    {
+      "label": "Seed Products",
+      "type": "shell",
+      "command": "docker compose exec product-service npm run seed",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend Syntax Check",
+      "type": "shell",
+      "command": "./scripts/check-backend-syntax.sh",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend Build",
+      "type": "shell",
+      "command": "cd frontend && npm install && npm run build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Terraform Init",
+      "type": "shell",
+      "command": "cd infrastructure/terraform && terraform init",
+      "problemMatcher": []
+    },
+    {
+      "label": "Terraform Validate",
+      "type": "shell",
+      "command": "cd infrastructure/terraform && terraform validate",
+      "problemMatcher": []
+    },
+    {
+      "label": "Terraform Plan",
+      "type": "shell",
+      "command": "cd infrastructure/terraform && terraform plan",
+      "problemMatcher": []
+    }
+  ]
+}

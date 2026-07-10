@@ -1,0 +1,67 @@
+{
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "family": "flipkart-notification-service",
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "notification-service",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/flipkart-notification-service:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3006,
+          "hostPort": 3006,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3006"
+        },
+        {
+          "name": "MONGODB_URI",
+          "value": "mongodb://docdbadmin:<URL_ENCODED_PASSWORD>@<DOCDB_CLUSTER_ENDPOINT>:27017/flipkart-notifications?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+        },
+        {
+          "name": "SMTP_HOST",
+          "value": "<SMTP_HOST_OPTIONAL>"
+        },
+        {
+          "name": "SMTP_PORT",
+          "value": "587"
+        },
+        {
+          "name": "SMTP_USER",
+          "value": "<SMTP_USER_OPTIONAL>"
+        },
+        {
+          "name": "SMTP_PASS",
+          "value": "<SMTP_PASS_OPTIONAL>"
+        },
+        {
+          "name": "EMAIL_FROM",
+          "value": "Flipkart Clone <no-reply@example.com>"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flipkart-notification-service",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

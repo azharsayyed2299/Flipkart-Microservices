@@ -1,0 +1,124 @@
+name: Deploy Flipkart Clone to AWS ECS
+
+on:
+  # Manual all-service or selected-service deployment.
+  # Automatic path-based deployments are handled by deploy-<service>.yml workflows.
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to deploy"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - api-gateway
+          - user-service
+          - product-service
+          - cart-service
+          - order-service
+          - payment-service
+          - notification-service
+          - frontend
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER || 'flipkart-cluster' }}
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy ${{ matrix.key }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: api-gateway
+            directory: api-gateway
+            ecr_repository: flipkart-api-gateway
+            ecs_service: api-gateway-service
+          - key: user-service
+            directory: user-service
+            ecr_repository: flipkart-user-service
+            ecs_service: user-service
+          - key: product-service
+            directory: product-service
+            ecr_repository: flipkart-product-service
+            ecs_service: product-service
+          - key: cart-service
+            directory: cart-service
+            ecr_repository: flipkart-cart-service
+            ecs_service: cart-service
+          - key: order-service
+            directory: order-service
+            ecr_repository: flipkart-order-service
+            ecs_service: order-service
+          - key: payment-service
+            directory: payment-service
+            ecr_repository: flipkart-payment-service
+            ecs_service: payment-service
+          - key: notification-service
+            directory: notification-service
+            ecr_repository: flipkart-notification-service
+            ecs_service: notification-service
+          - key: frontend
+            directory: frontend
+            ecr_repository: flipkart-frontend
+            ecs_service: frontend-service
+
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.service == 'all' || github.event.inputs.service == matrix.key }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL || '/api' }}
+        run: |
+          set -euo pipefail
+          DIR="${{ matrix.directory }}"
+          REPO="${{ matrix.ecr_repository }}"
+          DOCKERFILE="$DIR/Dockerfile"
+          if [ -f "$DIR/Dockerfile.aws" ]; then
+            DOCKERFILE="$DIR/Dockerfile.aws"
+          fi
+
+          BUILD_ARGS=""
+          if [ "$DIR" = "frontend" ]; then
+            BUILD_ARGS="--build-arg REACT_APP_API_URL=$REACT_APP_API_URL"
+          fi
+
+          echo "Building $REPO from $DIR using $DOCKERFILE"
+          docker build -f "$DOCKERFILE" $BUILD_ARGS -t "$ECR_REGISTRY/$REPO:$IMAGE_TAG" "$DIR"
+          docker tag "$ECR_REGISTRY/$REPO:$IMAGE_TAG" "$ECR_REGISTRY/$REPO:latest"
+          docker push "$ECR_REGISTRY/$REPO:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$REPO:latest"
+
+      - name: Force ECS service deployment
+        run: |
+          aws ecs update-service \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --service "${{ matrix.ecs_service }}" \
+            --force-new-deployment \
+            --region "${{ env.AWS_REGION }}"
+
+      - name: Wait for ECS stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster "${{ env.ECS_CLUSTER }}" \
+            --services "${{ matrix.ecs_service }}" \
+            --region "${{ env.AWS_REGION }}"

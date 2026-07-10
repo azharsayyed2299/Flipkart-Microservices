@@ -1,0 +1,43 @@
+version: 0.2
+
+# CodeBuild buildspec for flipkart-frontend.
+# Expected CodeBuild environment variables:
+#   AWS_ACCOUNT_ID = your 12-digit AWS account ID
+#   AWS_DEFAULT_REGION = us-east-1
+# Optional for frontend:
+#   REACT_APP_API_URL = /api or https://yourdomain.com/api
+
+env:
+  variables:
+    SERVICE_DIR: "frontend"
+    ECR_REPOSITORY: "flipkart-frontend"
+    CONTAINER_NAME: "frontend"
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - DOCKERFILE="$SERVICE_DIR/Dockerfile"
+      - if [ -f "$SERVICE_DIR/Dockerfile.aws" ]; then DOCKERFILE="$SERVICE_DIR/Dockerfile.aws"; fi
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building $ECR_REPOSITORY using $DOCKERFILE
+      - docker build -f "$DOCKERFILE" -t $REPOSITORY_URI:latest --build-arg REACT_APP_API_URL=${REACT_APP_API_URL:-/api} $SERVICE_DIR
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing Docker images...
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - echo Writing image definitions file...
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+
+artifacts:
+  files:
+    - imagedefinitions.json

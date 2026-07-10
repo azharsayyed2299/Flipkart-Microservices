@@ -1,0 +1,9 @@
+.checkout-page { display: grid; grid-template-columns: 1fr 360px; gap: 24px; align-items: start; }
+.checkout-form, .checkout-summary { padding: 22px; }
+.checkout-form h2 { margin: 0 0 16px; }
+.checkout-form h2:not(:first-child) { margin-top: 28px; }
+.form-control.full { grid-column: 1 / -1; }
+.payment-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.payment-options label { padding: 14px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; cursor: pointer; }
+.checkout-item { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+@media (max-width: 900px) { .checkout-page { grid-template-columns: 1fr; } }

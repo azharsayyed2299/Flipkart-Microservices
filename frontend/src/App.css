@@ -1,0 +1,17 @@
+.App { min-height: 100vh; }
+.page { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.loading, .error, .empty-state { max-width: 900px; margin: 40px auto; background: white; border-radius: 10px; padding: 40px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.error { color: #d32f2f; }
+.primary-btn, .secondary-btn, .danger-btn { border: none; border-radius: 4px; padding: 12px 18px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.primary-btn { background: #fb641b; color: white; }
+.secondary-btn { background: #2874f0; color: white; }
+.danger-btn { background: #ff6161; color: white; }
+.card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.form-control { display: flex; flex-direction: column; gap: 6px; }
+.form-control label { font-weight: 600; font-size: 13px; color: #555; }
+.form-control input, .form-control select, .form-control textarea { padding: 12px; border: 1px solid #d7d7d7; border-radius: 4px; font-size: 14px; background: white; }
+.alert { padding: 12px 14px; border-radius: 6px; margin-bottom: 16px; }
+.alert.error { background: #ffebee; color: #c62828; }
+.alert.success { background: #e8f5e9; color: #2e7d32; }
+@media (max-width: 768px) { .page { padding: 16px; } .form-grid { grid-template-columns: 1fr; } }

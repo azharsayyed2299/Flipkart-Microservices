@@ -1,0 +1,51 @@
+{
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "family": "flipkart-cart-service",
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "cart-service",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/flipkart-cart-service:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3003,
+          "hostPort": 3003,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3003"
+        },
+        {
+          "name": "MONGODB_URI",
+          "value": "mongodb://docdbadmin:<URL_ENCODED_PASSWORD>@<DOCDB_CLUSTER_ENDPOINT>:27017/flipkart-carts?tls=true&tlsCAFile=/app/global-bundle.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false"
+        },
+        {
+          "name": "PRODUCT_SERVICE_URL",
+          "value": "http://product-service.flipkart.local:3002"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flipkart-cart-service",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

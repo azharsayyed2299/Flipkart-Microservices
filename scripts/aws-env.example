@@ -1,0 +1,21 @@
+# Copy to scripts/aws-env.local and edit values.
+# Do not commit scripts/aws-env.local if it contains account-specific or sensitive values.
+
+AWS_PROFILE=flipkart-dev
+AWS_REGION=us-east-1
+AWS_ACCOUNT_ID=123456789012
+ECS_CLUSTER=flipkart-cluster
+ALB_DNS_NAME=flipkart-alb-xxxxxxxx.us-east-1.elb.amazonaws.com
+
+# ECR repository prefix. Usually this exact format:
+ECR_REGISTRY=123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+# ECS service names
+API_GATEWAY_SERVICE=api-gateway-service
+USER_SERVICE=user-service
+PRODUCT_SERVICE=product-service
+CART_SERVICE=cart-service
+ORDER_SERVICE=order-service
+PAYMENT_SERVICE=payment-service
+NOTIFICATION_SERVICE=notification-service
+FRONTEND_SERVICE=frontend-service

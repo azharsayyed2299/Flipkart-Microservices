@@ -1,0 +1,8 @@
+.auth-page { display: flex; justify-content: center; align-items: flex-start; }
+.auth-card { width: min(430px, 100%); padding: 30px; }
+.auth-card h2 { margin: 0 0 8px; font-size: 28px; }
+.auth-card p { color: #666; margin-top: 0; }
+.auth-card .form-control { margin-bottom: 14px; }
+.auth-card .primary-btn { width: 100%; margin-top: 8px; }
+.auth-switch { text-align: center; margin: 18px 0 0 !important; }
+.auth-switch a { color: #2874f0; font-weight: 800; text-decoration: none; }

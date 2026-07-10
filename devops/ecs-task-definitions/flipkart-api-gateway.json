@@ -1,0 +1,71 @@
+{
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "family": "flipkart-api-gateway",
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [
+    {
+      "name": "api-gateway",
+      "image": "<ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/flipkart-api-gateway:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "3000"
+        },
+        {
+          "name": "JWT_SECRET",
+          "value": "<JWT_SECRET>"
+        },
+        {
+          "name": "USER_SERVICE_URL",
+          "value": "http://user-service.flipkart.local:3001"
+        },
+        {
+          "name": "PRODUCT_SERVICE_URL",
+          "value": "http://product-service.flipkart.local:3002"
+        },
+        {
+          "name": "CART_SERVICE_URL",
+          "value": "http://cart-service.flipkart.local:3003"
+        },
+        {
+          "name": "ORDER_SERVICE_URL",
+          "value": "http://order-service.flipkart.local:3004"
+        },
+        {
+          "name": "PAYMENT_SERVICE_URL",
+          "value": "http://payment-service.flipkart.local:3005"
+        },
+        {
+          "name": "NOTIFICATION_SERVICE_URL",
+          "value": "http://notification-service.flipkart.local:3006"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/flipkart-api-gateway",
+          "awslogs-region": "<AWS_REGION>",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
