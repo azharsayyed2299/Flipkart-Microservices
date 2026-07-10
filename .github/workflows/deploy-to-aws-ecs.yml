@@ -29,76 +29,68 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - key: api-gateway
             service: api-gateway-service
             family: flipkart-api-gateway
             container: api-gateway
-            port: 3000
             build_dir: api-gateway
           - key: user-service
             service: user-service
             family: flipkart-user-service
             container: user-service
-            port: 3001
             build_dir: user-service
           - key: product-service
             service: product-service
             family: flipkart-product-service
             container: product-service
-            port: 3002
             build_dir: product-service
           - key: cart-service
             service: cart-service
             family: flipkart-cart-service
             container: cart-service
-            port: 3003
             build_dir: cart-service
           - key: order-service
             service: order-service
             family: flipkart-order-service
             container: order-service
-            port: 3004
             build_dir: order-service
           - key: payment-service
             service: payment-service
             family: flipkart-payment-service
             container: payment-service
-            port: 3005
             build_dir: payment-service
           - key: notification-service
             service: notification-service
             family: flipkart-notification-service
             container: notification-service
-            port: 3006
             build_dir: notification-service
           - key: frontend
             service: frontend-service
             family: flipkart-frontend
             container: frontend
-            port: 80
             build_dir: frontend
 
     steps:
       - name: Check if should deploy this service
         id: check
         run: |
+          SHOULD_DEPLOY=false
+
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            if [ "${{ github.event.inputs.service }}" == "all" ] || \
-               [ "${{ github.event.inputs.service }}" == "${{ matrix.key }}" ]; then
-              echo "should_deploy=true" >> $GITHUB_OUTPUT
-              echo "Deploying: ${{ matrix.key }}"
-            else
-              echo "should_deploy=false" >> $GITHUB_OUTPUT
-              echo "Skipping: ${{ matrix.key }}"
+            if [ "${{ github.event.inputs.service }}" == "all" ]; then
+              SHOULD_DEPLOY=true
+            elif [ "${{ github.event.inputs.service }}" == "${{ matrix.key }}" ]; then
+              SHOULD_DEPLOY=true
             fi
           elif [ "${{ github.event_name }}" == "push" ]; then
-            echo "should_deploy=true" >> $GITHUB_OUTPUT
-            echo "Push event - deploying: ${{ matrix.key }}"
-          else
-            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            SHOULD_DEPLOY=true
           fi
+
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "Service ${{ matrix.key }}: should_deploy=$SHOULD_DEPLOY"
 
       - name: Checkout code
         if: steps.check.outputs.should_deploy == 'true'
@@ -119,58 +111,65 @@ jobs:
 
       - name: Build and push Docker image
         if: steps.check.outputs.should_deploy == 'true'
+        id: build-and-push
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: flipkart-${{ matrix.key }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          echo "Building ${{ matrix.key }}..."
-          echo "Build directory: ${{ matrix.build_dir }}"
+          ECR_REPOSITORY="flipkart-${{ matrix.key }}"
+          FULL_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          LATEST_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-          # Check for Dockerfile.aws (backend services need it for DocumentDB TLS)
+          echo "Building ${{ matrix.key }}..."
+
           if [ -f "${{ matrix.build_dir }}/Dockerfile.aws" ]; then
             echo "Using Dockerfile.aws for DocumentDB TLS support"
-            docker build -f ${{ matrix.build_dir }}/Dockerfile.aws \
-                         -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-                         -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                         ${{ matrix.build_dir }}/
+            docker build \
+              -f ${{ matrix.build_dir }}/Dockerfile.aws \
+              -t $FULL_IMAGE \
+              -t $LATEST_IMAGE \
+              ./${{ matrix.build_dir }}/
           else
             echo "Using normal Dockerfile"
-            docker build -f ${{ matrix.build_dir }}/Dockerfile \
-                         -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-                         -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-                         ${{ matrix.build_dir }}/
+            docker build \
+              -f ${{ matrix.build_dir }}/Dockerfile \
+              -t $FULL_IMAGE \
+              -t $LATEST_IMAGE \
+              ./${{ matrix.build_dir }}/
           fi
 
-          echo "Pushing $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "Pushing images to ECR..."
+          docker push $FULL_IMAGE
+          docker push $LATEST_IMAGE
 
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "image=$FULL_IMAGE" >> $GITHUB_OUTPUT
+          echo "Successfully pushed: $FULL_IMAGE"
 
       - name: Download current task definition
         if: steps.check.outputs.should_deploy == 'true'
         run: |
+          echo "Downloading task definition: ${{ matrix.family }}"
           aws ecs describe-task-definition \
             --task-definition ${{ matrix.family }} \
             --query 'taskDefinition' \
             --output json > task-definition.json
-          echo "Downloaded task definition for ${{ matrix.family }}"
+          echo "Task definition downloaded successfully"
+          cat task-definition.json | head -20
 
-      - name: Render new task definition
+      - name: Render new task definition with new image
         if: steps.check.outputs.should_deploy == 'true'
-        id: task-def
+        id: render-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
           container-name: ${{ matrix.container }}
-          image: ${{ steps.build-push.outputs.image }}
+          image: ${{ steps.build-and-push.outputs.image }}
 
-      - name: Deploy to ECS
+      - name: Deploy to Amazon ECS
         if: steps.check.outputs.should_deploy == 'true'
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
           service: ${{ matrix.service }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
@@ -180,8 +179,8 @@ jobs:
         if: steps.check.outputs.should_deploy == 'true'
         run: |
           echo "========================================="
-          echo "DEPLOYMENT SUCCESSFUL"
-          echo "Service: ${{ matrix.service }}"
-          echo "Image: ${{ steps.build-push.outputs.image }}"
-          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "DEPLOYMENT COMPLETE"
+          echo "Service : ${{ matrix.service }}"
+          echo "Cluster : ${{ env.ECS_CLUSTER }}"
+          echo "Image   : ${{ steps.build-and-push.outputs.image }}"
           echo "========================================="
